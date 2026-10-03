@@ -1,0 +1,5 @@
+{
+  "description": "40-entry subset of the released training LMDB (deterministic first entries), used by the ED-VAE training example.",
+  "entries": 40,
+  "unique_base_ids": 40
+}

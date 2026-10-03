@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "description": "Reference parameters of the released GuestGen pipeline. The scripts use these values; entries marked as dataset facts describe the released training data.",
+  "training_data": {
+    "base_complexes": 4937,
+    "experimental_complexes": 4085,
+    "virtual_complexes": 852,
+    "num_augmentations_per_complex": 5,
+    "augmented_host_guest_pairs": 24685,
+    "lmdb_entries": 24678,
+    "rejected_before_lmdb": 7,
+    "augmentation": {
+      "seed": 123,
+      "rotation_step_size": 5,
+      "translation_step_size": 20,
+      "notes": [
+        "The RNG is re-seeded for every host/guest pair, so all pairs receive the same sequence of random draws.",
+        "The rotation angle follows the expression random()*2 - rotation_step_size, which yields approximately [-5, -3] rad for step size 5."
+      ]
+    }
+  },
+  "electron_density": {
+    "xtb_iterations": 999,
+    "multiwfn_function": 5,
+    "multiwfn_property": "rho",
+    "multiwfn_grid_spacing_bohr": 0.5,
+    "multiwfn_extension_bohr": 6.0,
+    "target_grid": [48, 48, 48],
+    "target_step_angstrom": 0.35,
+    "target_axis_range_angstrom": [-8.225, 8.225],
+    "lmdb_value_policy": {
+      "non_finite": "reject",
+      "negative": "reject",
+      "greater_than_1": "set_to_0"
+    },
+    "host_ed_clipped_to_0_1": false
+  },
+  "edvae_training": {
+    "max_channels": 128,
+    "latent_dim": 128,
+    "dropout_ratio": 0.3,
+    "optimizer": "Adam",
+    "lr": 3e-4,
+    "start_lr": 3e-5,
+    "num_warmup_steps": 200,
+    "cosine_t_max": 3800,
+    "cosine_eta_min": 3e-6,
+    "loss_beta": 1e-5,
+    "batch_size": 32,
+    "max_steps": 5000,
+    "validation_interval": 50,
+    "log_interval": 10,
+    "random_seed": 42,
+    "split": {
+      "kind": "grouped by base_id",
+      "train_ratio": 0.9
+    },
+    "released_checkpoint": {
+      "path": "models/checkpoints/guestgen_step_5000.pt",
+      "sha256": "2579ce1e4b06ef84701a0c787995ba672c695e5f4bbf3f1726f996bc3310eb81"
+    }
+  },
+  "guest_ed_inference": {
+    "architecture": "VAE (max_channels=128, latent_dim=128)",
+    "sampling": "latent z ~ N(mu, sigma) via the reparameterization trick; set --seed for reproducible runs"
+  },
+  "fragment_growth": {
+    "rho_mask_threshold": 0.01,
+    "rho_mask_rule": "values <= threshold become 0",
+    "step_size_angstrom": 0.35,
+    "effective_growth_grid_spacing_angstrom": 0.34270833333333334,
+    "grid_origin_angstrom": -8.225,
+    "grid_last_coordinate_angstrom": 7.882291666666665,
+    "flatten_order": "F",
+    "tolerance": 0.3,
+    "iterations": 3,
+    "retain_molecules_per_step": 80,
+    "maximum_output_molecules": 2000,
+    "bucket_size": 32,
+    "similarity_threshold": 0.5,
+    "seed": 1234,
+    "num_cpu": 32,
+    "batch_size": 128,
+    "device": "cuda",
+    "binding_mode": {
+      "xtb_method": "gfn2",
+      "xtb_opt_level": "normal",
+      "preoptimization": "gfnff loose",
+      "binding_workers": 8,
+      "solvent_by_case": {
+        "qupyik": "water (ALPB)",
+        "bezcoa": "none",
+        "levpuz": "none"
+      },
+      "complex_topology_filter": "the optimized complex must remain exactly two fragments",
+      "binding_energy_unit": "kcal/mol"
+    }
+  }
+}
