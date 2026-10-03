@@ -33,6 +33,8 @@ class GrowthPointPredictionModel(nn.Module):
 
     def __init__(self, dim_in=10, dim_out=3, dim_edge_feat=7, num_layers=2):
         super(GrowthPointPredictionModel, self).__init__()
+        if num_layers < 1:
+            raise ValueError("num_layers must be >= 1")
         self.dim_in = dim_in
         self.dim_out = dim_out
         self.dim_edge_feat = dim_edge_feat
@@ -48,6 +50,9 @@ class GrowthPointPredictionModel(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, edge_index, x, coords, edge_feat):
+        # Note: every iteration re-applies the same EGNN layer to the same
+        # input features. This is the released forward pass (the trained
+        # checkpoints expect it); do not change without re-training.
         for i in range(self.num_layers):
             x_out, coords_out = self.EGNN(edge_index, x, coords, edge_feat)
             x_out = x_out.relu()
@@ -62,6 +67,8 @@ class TorsionAnglePredictionModel(nn.Module):
     def __init__(self, frag_dim_in=32, core_dim_in=35, egnn_dim_tmp=1024, egnn_dim_out=256, egnn_num_layers=7, dim_edge_feat=7,
                  cnn_dim_in=1, cnn_dim_tmp=512, stride=2, padding=3, dim_tmp=128, dim_out=36, num_layers=6):
         super(TorsionAnglePredictionModel, self).__init__()
+        if num_layers < 1 or egnn_num_layers < 1:
+            raise ValueError("num_layers and egnn_num_layers must be >= 1")
         self.frag_dim_in = frag_dim_in
         self.core_dim_in = core_dim_in
         self.egnn_dim_tmp = egnn_dim_tmp
@@ -106,7 +113,7 @@ class TorsionAnglePredictionModel(nn.Module):
         for i in range(self.egnn_num_layers):
             x_out, coords_out = self.layer1(edge_index, x_out, coords_out, edge_feat)
             x_out = x_out.relu()
-        readout = global_sort_pool(x_out.squeeze(dim=0), batch, k=3)
+        readout = global_sort_pool(x_out, batch, k=3)
 
         x_out1, coords_out1 = self.layer_core(edge_index1, x1, coords1, edge_feat1)
         x_out1 = x_out1.relu()

@@ -35,6 +35,9 @@ fi
 
 TARGET_ARGS=()
 if [ $# -gt 0 ]; then
+  for target in "$@"; do
+    require_safe_name "${target}" "target"
+  done
   TARGET_ARGS=(--targets "$@")
 fi
 

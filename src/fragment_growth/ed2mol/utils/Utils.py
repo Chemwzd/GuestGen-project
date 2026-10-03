@@ -221,10 +221,9 @@ def MolOpt(mols: Sequence[Chem.Mol], configs) -> List[Chem.Mol]:
     os.makedirs(tmpdir, exist_ok=True)
 
     num_cpu = int(configs.get("sample", "num_cpu"))
-    if len(mols) <= num_cpu:
-        num_cpu = len(mols)
+    num_cpu = max(1, min(num_cpu, len(mols)))
 
-    chunksize = math.ceil(len(mols) / max(num_cpu, 1))
+    chunksize = math.ceil(len(mols) / num_cpu)
     mol_chunks = [mols[i : i + chunksize] for i in range(0, len(mols), chunksize)]
 
     input_sdfs = []
@@ -236,7 +235,7 @@ def MolOpt(mols: Sequence[Chem.Mol], configs) -> List[Chem.Mol]:
         w.close()
         input_sdfs.append(path)
 
-    pool = multiprocessing.Pool()
+    pool = multiprocessing.Pool(processes=num_cpu)
     results = [pool.apply_async(Minimize, args=[p, configs]) for p in input_sdfs]
     pool.close()
     pool.join()
@@ -373,12 +372,14 @@ class MolBucket:
         return bucket_fps
 
     def add(self, ranked_mols: Sequence[Chem.Mol]) -> List[Chem.Mol]:
+        valid_mols = [(idx, mol) for idx, mol in enumerate(ranked_mols) if mol is not None]
+        if not valid_mols:
+            return []
+        first_idx, first_mol = valid_mols[0]
         bucket_fps: Dict[int, object] = {
-            0: GetMorganFingerprint(Chem.RemoveHs(ranked_mols[0]), 2)
+            first_idx: GetMorganFingerprint(Chem.RemoveHs(first_mol), 2)
         }
-        for idx, m in enumerate(ranked_mols):
-            if m is None:
-                continue
+        for idx, m in valid_mols:
             m = Chem.RemoveAllHs(m)
             if len(bucket_fps) < self.bucket_size:
                 bucket_fps = self._maybe_add(idx, m, bucket_fps)

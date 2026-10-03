@@ -227,10 +227,20 @@ def discover_training_pairs(input_dir: Path) -> List[TrainingPair]:
             malformed.append(path.name)
             continue
         grouped.setdefault((parts[0], aug_idx), {})[parts[1]] = path
+    incomplete = [
+        f"{base_id}_{aug_idx} (has role {sorted(role_paths)[0]})"
+        for (base_id, aug_idx), role_paths in sorted(grouped.items())
+        if not ("1" in role_paths and "2" in role_paths)
+    ]
+    if incomplete:
+        shown = ", ".join(incomplete[:3])
+        raise PreprocessingError(
+            f"{len(incomplete)} incomplete augmented pair(s) found in {input_dir}: "
+            f"{shown}. Every pair needs both <base>_1_<aug>.mol and <base>_2_<aug>.mol."
+        )
     pairs = [
         TrainingPair(base_id, aug_idx, role_paths["1"], role_paths["2"])
         for (base_id, aug_idx), role_paths in sorted(grouped.items())
-        if "1" in role_paths and "2" in role_paths
     ]
     if not pairs:
         hint = f"; ignored examples: {malformed[:3]}" if malformed else ""
@@ -284,6 +294,24 @@ def _one_molecule(
     calculation_dir.mkdir(parents=True, exist_ok=True)
     copied_mol = calculation_dir / source_mol.name
     input_provenance = copy_readonly_input(source_mol, copied_mol)
+
+    # Clear products of a previous run in the same work directory: an xTB
+    # restart file or an old Multiwfn export would otherwise make a rerun
+    # differ numerically from a fresh run.
+    for stale_name in (
+        "xtbrestart",
+        "molden.input",
+        "output.txt",
+        "wbo",
+        "charges",
+        "xtbtopo.mol",
+        "xtbopt.mol",
+        "xtbopt.log",
+        "gfnff_topo",
+    ):
+        stale_path = calculation_dir / stale_name
+        if stale_path.exists():
+            stale_path.unlink()
 
     recenter_backend = "none"
     if recenter_host:
@@ -444,13 +472,15 @@ def _resolve_tools(args: argparse.Namespace) -> Dict[str, Optional[Path]]:
         args.multiwfn, ("GUESTGEN_MULTIWFN", "MULTIWFN_BIN"), "Multiwfn"
     )
     obabel: Optional[Path] = None
-    if args.obabel or os.environ.get("GUESTGEN_OBABEL") or os.environ.get("OBABEL_BIN"):
-        obabel = resolve_executable(
-            args.obabel or "obabel", ("GUESTGEN_OBABEL", "OBABEL_BIN"), "Open Babel"
-        )
-    elif args.xtb_input_format == "xyz" or (
+    explicit_obabel = (
+        args.obabel or os.environ.get("GUESTGEN_OBABEL") or os.environ.get("OBABEL_BIN")
+    )
+    needs_obabel = args.xtb_input_format == "xyz" or (
         args.xtb_input_format == "auto" and args.layout == "training"
-    ):
+    )
+    # Open Babel is only required for XYZ input, but an explicitly configured
+    # program is always resolved so a broken path is reported early.
+    if needs_obabel or explicit_obabel:
         obabel = resolve_executable(
             args.obabel or "obabel", ("GUESTGEN_OBABEL", "OBABEL_BIN"), "Open Babel"
         )

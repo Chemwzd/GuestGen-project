@@ -316,6 +316,10 @@ def train(
             )
 
         if (step_idx + 1) % val_interval == 0 and val_dataloader is not None:
+            # step_idx counts completed optimizer steps (1..num_steps).
+            # Validation and checkpointing fire every `interval` completed
+            # steps, and the checkpoint name records that count
+            # (guestgen_step_<completed steps>.pt).
             validate(
                 model=model,
                 val_dataloader=val_dataloader,
@@ -342,6 +346,17 @@ def main(args: argparse.Namespace) -> None:
     train_dataset, val_dataset = split_by_base_id(
         data_dir, dataset, train_ratio=0.90, seed=args.random_seed
     )
+    if len(train_dataset) == 0 or len(val_dataset) == 0:
+        raise SystemExit(
+            "The dataset must provide non-empty train and validation splits; got "
+            f"{len(train_dataset)} train / {len(val_dataset)} validation samples."
+        )
+    if len(train_dataset) < args.batch_size:
+        raise SystemExit(
+            f"Training split has {len(train_dataset)} samples but the batch size "
+            f"is {args.batch_size} (drop_last=True would leave no batches). Use "
+            "more data or a smaller --batch_size."
+        )
 
     train_dataloader = DataLoader(
         train_dataset,
@@ -351,7 +366,7 @@ def main(args: argparse.Namespace) -> None:
         pin_memory=True,
         num_workers=args.num_cpus,
         prefetch_factor=None,
-        persistent_workers=True,
+        persistent_workers=args.num_cpus > 0,
     )
     val_dataloader = DataLoader(
         val_dataset,
@@ -361,7 +376,7 @@ def main(args: argparse.Namespace) -> None:
         pin_memory=True,
         num_workers=args.num_cpus,
         prefetch_factor=None,
-        persistent_workers=True,
+        persistent_workers=args.num_cpus > 0,
     )
 
     print("INFO: Use ED-VAE to train")
@@ -462,5 +477,12 @@ if __name__ == "__main__":
     parser.add_argument("--swanlab_api_key", type=str, default="")
 
     args = parser.parse_args()
+
+    if args.val_interval <= 0 or args.log_interval <= 0:
+        parser.error("--val_interval and --log_interval must be positive")
+    if args.max_steps <= 0 or args.batch_size <= 0 or args.t_max <= 0:
+        parser.error("--max_steps, --batch_size and --t_max must be positive")
+    if args.num_cpus < 0 or args.num_warmup_steps < 0:
+        parser.error("--num_cpus and --num_warmup_steps must be non-negative")
 
     main(args)

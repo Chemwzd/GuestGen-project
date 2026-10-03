@@ -69,6 +69,18 @@ def describe(values: list[float]) -> dict[str, float]:
     }
 
 
+def sanitize_for_json(payload):
+    """Replace non-finite floats with ``null`` for strict JSON output."""
+
+    if isinstance(payload, dict):
+        return {key: sanitize_for_json(value) for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [sanitize_for_json(value) for value in payload]
+    if isinstance(payload, float) and not math.isfinite(payload):
+        return None
+    return payload
+
+
 def internal_diversity(molecules: list[Chem.Mol], sample_cap: int, seed: int) -> dict[str, float]:
     """1 - mean pairwise ECFP4 Tanimoto similarity over a random sample."""
 
@@ -115,7 +127,7 @@ def binding_energy_stats(path: Path) -> dict[str, float]:
                     continue
 
     valid = [value for value in values if value < 0]
-    failed = [value for value in values if value >= 999]
+    failed = [value for value in values if value == 999.0]
     stats = describe(valid)
     stats.update(
         {
@@ -150,6 +162,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.diversity_sample < 1:
+        parser.error("--diversity-sample must be at least 1")
     run_dir = args.run_dir.resolve()
     output_dir = (args.output_dir or args.run_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -213,7 +227,8 @@ def main() -> None:
         summary["binding_energy_kcal_mol"] = binding_energy_stats(args.binding_energies.resolve())
 
     (output_dir / "analysis_summary.json").write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=True) + "\n",
+        json.dumps(sanitize_for_json(summary), indent=2, ensure_ascii=False, allow_nan=False)
+        + "\n",
         encoding="utf-8",
     )
 
@@ -277,7 +292,7 @@ def main() -> None:
             plt.savefig(output_dir / f"hist_{key}.png", dpi=200, bbox_inches="tight")
             plt.close()
 
-    print(json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=True))
+    print(json.dumps(sanitize_for_json(summary), indent=2, ensure_ascii=False, allow_nan=False))
     if not math.isfinite(summary["validity"]) or n_molecules == 0:
         raise SystemExit("No RDKit-readable molecules found in output.sdf")
 

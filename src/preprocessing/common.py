@@ -135,6 +135,8 @@ def run_logged(
     """Run an external tool without a shell and retain complete logs."""
 
     cwd.mkdir(parents=True, exist_ok=True)
+    stdout_path.parent.mkdir(parents=True, exist_ok=True)
+    stderr_path.parent.mkdir(parents=True, exist_ok=True)
     with (
         stdout_path.open("w", encoding="utf-8") as stdout_handle,
         stderr_path.open("w", encoding="utf-8") as stderr_handle,

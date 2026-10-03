@@ -9,6 +9,7 @@ host/guest complex; all augmented copies of one complex share the same
 
 from __future__ import annotations
 
+import os
 import pickle
 from pathlib import Path
 
@@ -59,6 +60,7 @@ class HGLMDBDataset(Dataset):
         self.data_dir = Path(data_dir)
 
         self.env = None
+        self._env_pid = None
 
         meta_env = lmdb.open(
             str(self.data_dir),
@@ -84,12 +86,21 @@ class HGLMDBDataset(Dataset):
             readahead=False,
             meminit=False,
         )
+        self._env_pid = os.getpid()
 
     def __len__(self) -> int:
         return self.length
 
     def __getitem__(self, index: int):
-        if self.env is None:
+        # LMDB environments must not be shared across `fork`ed DataLoader
+        # workers; reopen whenever the reading process differs.
+        if self.env is None or self._env_pid != os.getpid():
+            if self.env is not None:
+                try:
+                    self.env.close()
+                except Exception:
+                    pass
+                self.env = None
             self._init_env()
 
         with self.env.begin(write=False) as txn:

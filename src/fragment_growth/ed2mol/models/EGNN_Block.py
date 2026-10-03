@@ -25,6 +25,10 @@ class EGNNlayer(MessagePassing):
     
     def forward(self, edge_index, x, coords, edge_feat):
 
+        # Edge geometry is intentionally frozen to the released behavior:
+        # rela_diff/dist are zero for every edge and coords_out equals coords.
+        # The released GPPM/TAPM checkpoints were trained with this forward
+        # pass; changing it would invalidate them.
         rela_diff = coords[edge_index[0]] - coords[edge_index[0]]
         dist = th.norm(coords[edge_index[0]] - coords[edge_index[0]], dim = 1, keepdim = True)
         

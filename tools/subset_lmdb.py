@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pickle
+import shutil
 from pathlib import Path
 
 import lmdb
@@ -35,35 +37,53 @@ def main() -> None:
         print(f"[SKIP] subset LMDB already exists: {output}")
         return
 
+    # Build in a temporary directory and publish atomically, so an interrupted
+    # or failed run can never masquerade as a complete subset.
+    building = output.with_name(f"{output.name}.building")
+    if building.exists():
+        shutil.rmtree(building)
+    building.mkdir(parents=True, exist_ok=True)
+    if output.exists() and not any(output.iterdir()):
+        output.rmdir()
+
     input_env = lmdb.open(
         str(source), readonly=True, lock=False, readahead=False, meminit=False
     )
-    output.mkdir(parents=True, exist_ok=True)
-    output_env = lmdb.open(str(output), map_size=2 * 1024**3)
-    base_ids: set[str] = set()
-    copied = 0
-    with input_env.begin(write=False) as source_txn, output_env.begin(write=True) as target_txn:
-        available = source_txn.stat()["entries"]
-        for index in range(min(args.entries, available)):
-            raw = source_txn.get(str(index).encode("ascii"))
-            if raw is None:
-                raise RuntimeError(f"Missing source key {index}")
-            record = pickle.loads(raw)
-            base_ids.add(str(record["base_id"]))
-            target_txn.put(str(copied).encode("ascii"), raw)
-            copied += 1
-    input_env.close()
-    output_env.sync()
-    output_env.close()
-    manifest = {
-        "source": str(source),
-        "output": str(output),
-        "entries": copied,
-        "unique_base_ids": len(base_ids),
-    }
-    (output / "subset_manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    output_env = None
+    try:
+        output_env = lmdb.open(str(building), map_size=2 * 1024**3)
+        base_ids: set[str] = set()
+        copied = 0
+        with input_env.begin(write=False) as source_txn, output_env.begin(write=True) as target_txn:
+            available = source_txn.stat()["entries"]
+            for index in range(min(args.entries, available)):
+                raw = source_txn.get(str(index).encode("ascii"))
+                if raw is None:
+                    raise RuntimeError(f"Missing source key {index}")
+                record = pickle.loads(raw)
+                base_ids.add(str(record["base_id"]))
+                target_txn.put(str(copied).encode("ascii"), raw)
+                copied += 1
+        output_env.sync()
+        output_env.close()
+        output_env = None
+        manifest = {
+            "source": str(source),
+            "output": str(output),
+            "entries": copied,
+            "unique_base_ids": len(base_ids),
+        }
+        (building / "subset_manifest.json").write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        os.replace(building, output)
+    except BaseException:
+        if output_env is not None:
+            output_env.close()
+        shutil.rmtree(building, ignore_errors=True)
+        raise
+    finally:
+        input_env.close()
     print(f"[DONE] copied {copied} entries across {len(base_ids)} base IDs")
 
 

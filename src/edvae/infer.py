@@ -62,7 +62,9 @@ def seed_all(seed: int, deterministic: bool = False) -> None:
 
 def load_model(checkpoint: Path, device: torch.device) -> VAE:
     model = VAE(**ARCHITECTURE)
-    state = torch.load(checkpoint, map_location=device)
+    # The released checkpoints are plain tensor state dicts; weights_only=True
+    # avoids executing arbitrary code from a tampered checkpoint.
+    state = torch.load(checkpoint, map_location=device, weights_only=True)
     if isinstance(state, dict) and "state_dict" in state:
         state = state["state_dict"]
     state = {
@@ -90,10 +92,24 @@ def load_host_ed(path: Path) -> np.ndarray:
     return array
 
 
+def validate_target_name(name: str) -> str:
+    """Reject target names that are not plain path components."""
+
+    if not name or name in {".", ".."} or name.startswith("-"):
+        raise ValueError(f"Unsafe target name: {name!r}")
+    if "/" in name or "\\" in name:
+        raise ValueError(f"Unsafe target name: {name!r}")
+    return name
+
+
 def discover_targets(input_dir: Path, names: list[str] | None) -> list[str]:
     if names:
-        return [name.lower() for name in names]
-    return sorted(path.name.lower() for path in input_dir.iterdir() if path.is_dir())
+        return [validate_target_name(name) for name in names]
+    return sorted(
+        validate_target_name(path.name)
+        for path in input_dir.iterdir()
+        if path.is_dir()
+    )
 
 
 def stats(array: np.ndarray) -> dict[str, float | int | list[int]]:

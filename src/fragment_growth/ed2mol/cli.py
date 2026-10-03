@@ -35,25 +35,28 @@ def run(config_path: str, keep_tmp: bool = False) -> None:
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(tmp_dir, exist_ok=True)
 
-    liged_dir = (
-        configs.get("sample", "ligED_dir")
-        if configs.has_option("sample", "ligED_dir")
-        else output_dir
-    )
-    liged = load_ligand_ed(liged_dir) if liged_dir else None
+    try:
+        liged_dir = (
+            configs.get("sample", "ligED_dir")
+            if configs.has_option("sample", "ligED_dir")
+            else output_dir
+        )
+        liged = load_ligand_ed(liged_dir) if liged_dir else None
 
-    use_binding_energy = configs.has_option(
-        "sample", "use_binding_energy"
-    ) and configs.getboolean("sample", "use_binding_energy")
-    if use_binding_energy:
-        print(f"Using binding energy: {use_binding_energy}")
-        run_generation_binding(liged, configs)
-    else:
-        print("No binding energy was set")
-        run_generation(liged, configs)
-
-    if not keep_tmp:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        use_binding_energy = configs.has_option(
+            "sample", "use_binding_energy"
+        ) and configs.getboolean("sample", "use_binding_energy")
+        if use_binding_energy:
+            print(f"Using binding energy: {use_binding_energy}")
+            run_generation_binding(liged, configs)
+        else:
+            print("No binding energy was set")
+            run_generation(liged, configs)
+    finally:
+        # The working directory is owned by this invocation; remove it on every
+        # exit path unless --keep-tmp was requested.
+        if not keep_tmp:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def main(argv: list[str] | None = None) -> None:

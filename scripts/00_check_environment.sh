@@ -55,8 +55,12 @@ echo "-- external programs --"
 check_program() {
   local label="$1" env_name="$2" candidates="$3"
   local value="${!env_name:-}"
-  if [ -n "${value}" ] && [ -x "${value}" ]; then
-    echo "[OK] ${label}: ${value}"
+  if [ -n "${value}" ]; then
+    if [ -x "${value}" ] && [ -f "${value}" ]; then
+      echo "[OK] ${label}: ${value}"
+    else
+      echo "[WARN] ${label}: ${env_name}=${value} is not an executable file"
+    fi
     return
   fi
   local command_name
@@ -79,10 +83,17 @@ check_sha() {
   local path="${PROJECT_ROOT}/${relative}"
   if [ ! -f "${path}" ]; then
     echo "[MISSING] ${relative}"
-    return
+    return 0
+  fi
+  if ! command -v sha256sum >/dev/null 2>&1; then
+    echo "[WARN] sha256sum is unavailable; cannot verify ${relative}"
+    return 0
   fi
   local actual
-  actual="$(sha256sum "${path}" | awk '{print $1}')"
+  if ! actual="$(sha256sum "${path}" 2>/dev/null | awk '{print $1}')" || [ -z "${actual}" ]; then
+    echo "[WARN] could not hash ${relative}"
+    return 0
+  fi
   if [ "${actual}" = "${expected}" ]; then
     echo "[OK] ${relative}"
   else

@@ -48,6 +48,9 @@ class Mol2GraphGrowthPoint:
             bond_is_conjugated = [int(b.GetIsConjugated())]
             bond_vector.append(b1 + b2 + bondtype_encoding + bond_is_in_ring + bond_is_conjugated)
             bond_vector.append(b2 + b1 + bondtype_encoding + bond_is_in_ring + bond_is_conjugated)
+        if not bond_vector:
+            # Bondless structures still need a shaped edge tensor.
+            return th.zeros((0, 9), dtype=th.long)
         return th.tensor(bond_vector, dtype=th.long)
 
     def _atom_label(self):
@@ -102,7 +105,7 @@ class Mol2GraphGrowthPoint:
             atomexgrid = []
             for i in ind1:
                 atomexgrid.extend(i)
-            atomexgrid = np.array(list(set(atomexgrid)))
+            atomexgrid = np.array(sorted(set(atomexgrid)), dtype=int)
             atomexgrid = atomexgrid[edval[atomexgrid] > 0]
 
             env = defaultdict(list)
@@ -117,6 +120,9 @@ class Mol2GraphGrowthPoint:
                         acc_ratio = in_ratio - ex_ratio
                         env[idx].extend([ex_ratio, acc_ratio])
                     except Exception:
+                        # Deliberate fallback of the released protocol: an atom
+                        # whose neighborhood cannot be evaluated keeps a zero
+                        # density feature instead of aborting the run.
                         env[idx].extend([0, 0])
         else:
             raise AssertionError("No attachment point")
@@ -312,6 +318,9 @@ class Mol2GraphTorsionAngle:
             bond_is_conjugated = [int(b.GetIsConjugated())]
             bond_vector.append(b1 + b2 + bondtype_encoding + bond_is_in_ring + bond_is_conjugated)
             bond_vector.append(b2 + b1 + bondtype_encoding + bond_is_in_ring + bond_is_conjugated)
+        if not bond_vector:
+            # Bondless structures still need a shaped edge tensor.
+            return th.zeros((0, 9), dtype=th.long)
         return th.tensor(bond_vector, dtype=th.long)
 
     def _create_graph(self):
@@ -391,6 +400,8 @@ def TorsionAnglePred(model, frags, core, center, grid, device_type, batch_size, 
     """Top-k torsion angles (radians) predicted for every fragment."""
 
     device = th.device(device_type)
+    model = model.to(device)
+    model.eval()
     dataset = DatasetTorsionAngle(frags, core, center, grid)
 
     val_loader = loader.DataLoader(

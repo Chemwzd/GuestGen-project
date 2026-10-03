@@ -27,16 +27,16 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --full) MODE="full"; shift ;;
     --smoke) MODE="smoke"; shift ;;
-    --data-dir) DATA_DIR="$2"; shift 2 ;;
-    --max-steps) MAX_STEPS="$2"; shift 2 ;;
-    --batch-size) BATCH_SIZE="$2"; shift 2 ;;
-    --num-cpus) NUM_CPUS="$2"; shift 2 ;;
-    --num-warmup-steps) WARMUP="$2"; shift 2 ;;
-    --t-max) T_MAX="$2"; shift 2 ;;
-    --val-interval) VAL_INTERVAL="$2"; shift 2 ;;
-    --log-interval) LOG_INTERVAL="$2"; shift 2 ;;
-    --name) NAME="$2"; shift 2 ;;
-    --monitor-backend) MONITOR="$2"; shift 2 ;;
+    --data-dir) require_option_value "$1" $#; DATA_DIR="$2"; shift 2 ;;
+    --max-steps) require_option_value "$1" $#; MAX_STEPS="$2"; shift 2 ;;
+    --batch-size) require_option_value "$1" $#; BATCH_SIZE="$2"; shift 2 ;;
+    --num-cpus) require_option_value "$1" $#; NUM_CPUS="$2"; shift 2 ;;
+    --num-warmup-steps) require_option_value "$1" $#; WARMUP="$2"; shift 2 ;;
+    --t-max) require_option_value "$1" $#; T_MAX="$2"; shift 2 ;;
+    --val-interval) require_option_value "$1" $#; VAL_INTERVAL="$2"; shift 2 ;;
+    --log-interval) require_option_value "$1" $#; LOG_INTERVAL="$2"; shift 2 ;;
+    --name) require_option_value "$1" $#; NAME="$2"; shift 2 ;;
+    --monitor-backend) require_option_value "$1" $#; MONITOR="$2"; shift 2 ;;
     --) shift; EXTRA=("$@"); break ;;
     *) EXTRA+=("$1"); shift ;;
   esac
@@ -61,6 +61,31 @@ else
   LOG_INTERVAL="${LOG_INTERVAL:-1}"
   NAME="${NAME:-train_example}"
 fi
+
+check_positive_int() {
+  local label="$1" value="$2"
+  case "${value}" in
+    ""|*[!0-9]*) echo "error: ${label} must be a positive integer (got '${value}')" >&2; exit 2 ;;
+  esac
+  if [ "${value}" -le 0 ]; then
+    echo "error: ${label} must be a positive integer (got '${value}')" >&2
+    exit 2
+  fi
+}
+check_nonnegative_int() {
+  local label="$1" value="$2"
+  case "${value}" in
+    ""|*[!0-9]*) echo "error: ${label} must be a non-negative integer (got '${value}')" >&2; exit 2 ;;
+  esac
+}
+check_positive_int "--max-steps" "${MAX_STEPS}"
+check_positive_int "--batch-size" "${BATCH_SIZE}"
+check_positive_int "--t-max" "${T_MAX}"
+check_positive_int "--val-interval" "${VAL_INTERVAL}"
+check_positive_int "--log-interval" "${LOG_INTERVAL}"
+check_nonnegative_int "--num-cpus" "${NUM_CPUS}"
+check_nonnegative_int "--num-warmup-steps" "${WARMUP}"
+require_safe_name "${NAME}" "--name"
 
 DATA_DIR="${DATA_DIR:-${PROJECT_ROOT}/examples/training_lmdb_subset}"
 CKPT_DIR="${PROJECT_ROOT}/runs/training/${NAME}/checkpoints"

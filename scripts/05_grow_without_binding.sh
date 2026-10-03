@@ -17,8 +17,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/_common.sh"
 
 PYTHON="$(resolve_python FRAG_PYTHON e2m)"
-TARGET="${1:-bezcoa}"
-if [ $# -gt 0 ]; then shift; fi
+TARGET="bezcoa"
+if [ $# -gt 0 ]; then
+  case "$1" in
+    -*) : ;;  # option-first invocation: keep the default target
+    *) TARGET="$1"; shift ;;
+  esac
+fi
+require_safe_name "${TARGET}" "target"
+for argument in "$@"; do
+  case "${argument}" in
+    --mode|--mode=*)
+      echo "error: this wrapper fixes --mode nonbinding; pass the mode via run_case.py directly if needed" >&2
+      exit 2
+      ;;
+  esac
+done
 EXAMPLE="${EXAMPLE:-1}"
 
 args=(--project-root "${PROJECT_ROOT}" --target "${TARGET}" --mode nonbinding)

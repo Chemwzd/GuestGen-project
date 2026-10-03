@@ -62,6 +62,10 @@ def _convert_array(
     if (values < 0).any():
         raise PreprocessingError(f"{label} contains negative electron density")
     converted = values.astype(np.float32, copy=True)
+    if not np.isfinite(converted).all():
+        raise PreprocessingError(
+            f"{label} contains values outside the float32 range"
+        )
     if high_value_policy == "zero":
         # Training-set policy: values > 1 become 0, not 1.
         converted[converted > 1.0] = 0.0
@@ -124,6 +128,10 @@ def build_lmdb(args: argparse.Namespace) -> Dict[str, Any]:
             f"Processed PKL input directory does not exist: {args.input}"
         )
     reject_output_inside_sources(args.output, [args.input])
+    if args.output.exists() and not args.output.is_dir():
+        raise PreprocessingError(
+            f"Output path exists and is not a directory: {args.output}"
+        )
     if args.output.exists() and any(args.output.iterdir()):
         raise PreprocessingError(
             f"LMDB output already exists and is non-empty: {args.output}. "
@@ -169,20 +177,21 @@ def build_lmdb(args: argparse.Namespace) -> Dict[str, Any]:
                     high_value_policy=args.high_value_policy,
                 )
                 key = str(valid_count).encode("ascii")
+                # All metadata is computed before the record is written, so a
+                # failure here cannot leave a key that is absent from entries.
+                entry = {
+                    "key": key.decode("ascii"),
+                    "source": str(candidate.resolve()),
+                    "source_sha256": sha256_file(candidate),
+                    "base_id": payload["base_id"],
+                    "aug_idx": payload["aug_idx"],
+                    "host_min": float(payload["host_ed"].min()),
+                    "host_max": float(payload["host_ed"].max()),
+                    "guest_min": float(payload["guest_ed"].min()),
+                    "guest_max": float(payload["guest_ed"].max()),
+                }
                 transaction.put(key, pickle.dumps(payload))
-                valid_entries.append(
-                    {
-                        "key": key.decode("ascii"),
-                        "source": str(candidate.resolve()),
-                        "source_sha256": sha256_file(candidate),
-                        "base_id": payload["base_id"],
-                        "aug_idx": payload["aug_idx"],
-                        "host_min": float(payload["host_ed"].min()),
-                        "host_max": float(payload["host_ed"].max()),
-                        "guest_min": float(payload["guest_ed"].min()),
-                        "guest_max": float(payload["guest_ed"].max()),
-                    }
-                )
+                valid_entries.append(entry)
                 valid_count += 1
                 if valid_count % args.commit_frequency == 0:
                     transaction.commit()

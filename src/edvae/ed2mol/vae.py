@@ -261,6 +261,45 @@ class VAE(nn.Module):
     ):
         super(VAE, self).__init__()
 
+        if max_channels < 32:
+            raise ValueError(
+                "max_channels must be >= 32 (the decoder uses max_channels // 32)"
+            )
+
+        # The model contract is a [1, 48, 48, 48] input; verify that the
+        # configured convolution geometry keeps the 3^3 latent grid and
+        # reconstructs a 48^3 volume before building the submodules.
+        def conv3d_size(size: int, kernel: int, stride: int, padding: int) -> int:
+            return (size + 2 * padding - kernel) // stride + 1
+
+        def conv_transpose3d_size(
+            size: int, kernel: int, stride: int, padding: int, output_padding: int
+        ) -> int:
+            return (size - 1) * stride - 2 * padding + kernel + output_padding
+
+        encoded = 48
+        for kernel, stride, padding in zip(
+            encoder_kernel_sizes, encoder_strides, encoder_paddings
+        ):
+            encoded = conv3d_size(encoded, kernel, stride, padding)
+        if encoded != 3:
+            raise ValueError(
+                f"encoder geometry produces {encoded}^3 spatial features; "
+                "the latent projection expects 3^3"
+            )
+        decoded = 3
+        for kernel, stride, padding, output_padding in zip(
+            decoder_kernel_sizes,
+            decoder_strides,
+            decoder_paddings,
+            decoder_output_paddings,
+        ):
+            decoded = conv_transpose3d_size(decoded, kernel, stride, padding, output_padding)
+        if decoded != 48:
+            raise ValueError(
+                f"decoder geometry produces a {decoded}^3 volume; expected 48^3"
+            )
+
         self.max_channels = max_channels
         self.num_flatten_feats = max_channels * 2 * 3 * 3 * 3
 

@@ -86,10 +86,26 @@ def discover_pairs(
             base_id = _strip_role(host.stem, "host")
         return [MoleculePair(base_id, host, guest)]
     if host.is_dir() and guest.is_dir():
-        host_map = {_strip_role(path.stem, "host"): path for path in host.glob("*.mol")}
-        guest_map = {
-            _strip_role(path.stem, "guest"): path for path in guest.glob("*.mol")
-        }
+        host_map: Dict[str, Path] = {}
+        guest_map: Dict[str, Path] = {}
+        collisions: List[str] = []
+        for path in sorted(host.glob("*.mol")):
+            key = _strip_role(path.stem, "host")
+            if key in host_map:
+                collisions.append(f"host {host_map[key].name} / {path.name}")
+            else:
+                host_map[key] = path
+        for path in sorted(guest.glob("*.mol")):
+            key = _strip_role(path.stem, "guest")
+            if key in guest_map:
+                collisions.append(f"guest {guest_map[key].name} / {path.name}")
+            else:
+                guest_map[key] = path
+        if collisions:
+            raise PreprocessingError(
+                "Ambiguous host/guest names normalize to the same base ID: "
+                + "; ".join(sorted(collisions)[:3])
+            )
         shared = sorted(set(host_map).intersection(guest_map))
         if not shared:
             raise PreprocessingError(
@@ -130,6 +146,14 @@ def run_augmentation(args: argparse.Namespace) -> Dict[str, Any]:
     args.workdir.mkdir(parents=True, exist_ok=True)
     molecule_output = args.output / "molecules"
     molecule_output.mkdir(parents=True, exist_ok=True)
+    existing_outputs = sorted(molecule_output.glob("*.mol"))
+    if existing_outputs:
+        print(
+            f"[WARN] {len(existing_outputs)} existing MOL file(s) found in "
+            f"{molecule_output}; matching names are overwritten, but files from "
+            "earlier runs with different parameters are not removed.",
+            file=sys.stderr,
+        )
 
     backend = choose_recenter_backend(args.recenter_backend)
     if args.recenter_backend == "auto" and backend == "native":
@@ -166,7 +190,7 @@ def run_augmentation(args: argparse.Namespace) -> Dict[str, Any]:
                 seed=args.seed,
             )
 
-            outputs = []
+            prepared = []
             for aug_idx in range(args.num_aug):
                 aug_host = generated_dir / f"{base_id}_1_{aug_idx}.mol"
                 aug_guest = generated_dir / f"{base_id}_2_{aug_idx}.mol"
@@ -176,6 +200,12 @@ def run_augmentation(args: argparse.Namespace) -> Dict[str, Any]:
                     recenter_pair_native(aug_host, aug_guest)
                 elif backend != "none":
                     raise PreprocessingError(f"Unknown recenter backend: {backend}")
+                prepared.append((aug_idx, aug_host, aug_guest))
+
+            # Publish the pair only after every augmentation of the pair was
+            # prepared, so a failure cannot leave a partially published pair.
+            outputs = []
+            for aug_idx, aug_host, aug_guest in prepared:
                 final_host = molecule_output / aug_host.name
                 final_guest = molecule_output / aug_guest.name
                 shutil.copy2(str(aug_host), str(final_host))

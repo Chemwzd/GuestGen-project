@@ -33,7 +33,6 @@ ed_args=(
   --output "${HOST_ED_OUTPUT}"
   --xtb "${XTB_BIN:-xtb}"
   --multiwfn "${MULTIWFN_BIN:-Multiwfn}"
-  --obabel "${OBABEL_BIN:-obabel}"
   --xtb-input-format mol
   --xtb-iterations 999
   --grid-spacing 0.5
@@ -44,6 +43,11 @@ ed_args=(
 )
 if [ -n "${MULTIWFN_SETTINGS:-}" ]; then
   ed_args+=(--multiwfn-settings "${MULTIWFN_SETTINGS}")
+fi
+if [ -n "${OBABEL_BIN:-}" ]; then
+  # Only passed when explicitly configured; the MOL host layout does not need
+  # Open Babel.
+  ed_args+=(--obabel "${OBABEL_BIN}")
 fi
 for case_name in "${CASES[@]}"; do
   ed_args+=(--name "${case_name}")

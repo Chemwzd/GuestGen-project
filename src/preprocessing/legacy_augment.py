@@ -160,7 +160,12 @@ def get_aug_coordinates_double(
 
 
 def revise_coordinates(mol_contents, new_coordinates):
-    """Rewrite the atom block of a MOL file with new coordinates."""
+    """Rewrite the atom block of a MOL file with new coordinates.
+
+    The record layout is intentionally unchanged from the original
+    implementation: each atom line becomes coordinates + element symbol + the
+    original trailing field, exactly as used for the released dataset.
+    """
 
     num_atoms = mol_contents[3][:3].rstrip()
     num_atoms = int(num_atoms)
@@ -205,8 +210,6 @@ def generate_aug_files_single(
     Output files are named ``{out_prefix}_{i}.mol`` under ``outdir``.
     """
 
-    os.chdir(outdir)
-
     mol_contents = get_mol_contents(molfile)
     aug_coordinates = get_aug_coordinates_single(
         mol_contents,
@@ -217,7 +220,7 @@ def generate_aug_files_single(
     )
     for i in range(num_aug):
         new_mol_contents = revise_coordinates(mol_contents, aug_coordinates[i])
-        with open(f"{out_prefix}_{i}.mol", "w") as f:
+        with open(os.path.join(outdir, f"{out_prefix}_{i}.mol"), "w") as f:
             f.writelines(new_mol_contents)
     return None
 

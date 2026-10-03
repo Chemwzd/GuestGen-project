@@ -56,10 +56,17 @@ def load_models(
 
 
 def load_fragment_libraries(configs) -> Tuple[List[Chem.Mol], List[Chem.Mol]]:
-    cores = Chem.SDMolSupplier(configs.get("lib", "Cores"))
-    cores = [mol for mol in cores]
-    frags = Chem.SDMolSupplier(configs.get("lib", "Frags"))
-    frags = [mol for mol in frags]
+    cores = [
+        mol for mol in Chem.SDMolSupplier(configs.get("lib", "Cores")) if mol is not None
+    ]
+    frags = [
+        mol for mol in Chem.SDMolSupplier(configs.get("lib", "Frags")) if mol is not None
+    ]
+    if not cores or not frags:
+        raise ValueError(
+            "The core and fragment libraries must each contain at least one "
+            "readable molecule"
+        )
     return cores, frags
 
 
@@ -113,13 +120,19 @@ def run_generation(ed_grid: np.ndarray, configs) -> None:
                     core_mol_list = scorer.QScore(core_enumeration, ed_grid, tol=tolerance)
                     pop_mols.append(core_mol_list[:1])
             else:
-                CheckAtomCol(Chem.SDMolSupplier(ref_core)[0])
+                reference_molecules = [
+                    mol for mol in Chem.SDMolSupplier(ref_core) if mol is not None
+                ]
+                if not reference_molecules:
+                    raise ValueError(
+                        f"No readable molecules in the initial-core file: {ref_core}"
+                    )
+                CheckAtomCol(reference_molecules[0])
                 pop_mols = [
                     [c]
                     for c in tqdm(
-                        Chem.SDMolSupplier(ref_core), desc="Placing Reference Fragments"
+                        reference_molecules, desc="Placing Reference Fragments"
                     )
-                    if c
                 ]
 
         else:
@@ -221,9 +234,11 @@ def run_generation(ed_grid: np.ndarray, configs) -> None:
 
     out_path = os.path.join(configs.get("sample", "output_dir"), "output.sdf")
     writer = Chem.SDWriter(out_path)
-    for idx, mol in enumerate(selected):
-        mol.SetProp("generation number", str(idx))
-        writer.write(CleanMol(mol))
-    writer.close()
+    try:
+        for idx, mol in enumerate(selected):
+            mol.SetProp("generation number", str(idx))
+            writer.write(CleanMol(mol))
+    finally:
+        writer.close()
 
     print("**********Complete Molecule Generation**********")

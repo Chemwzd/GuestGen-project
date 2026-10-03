@@ -27,6 +27,8 @@ def load_array(path: Path, key: str | None = None) -> np.ndarray:
 
 
 def describe(array: np.ndarray, threshold: float) -> dict[str, object]:
+    if array.size == 0:
+        return {"shape": list(array.shape), "empty": True}
     return {
         "shape": list(array.shape),
         "min": float(array.min()),
@@ -46,6 +48,8 @@ def compare(reference: np.ndarray, candidate: np.ndarray, threshold: float) -> d
             "reference_shape": list(reference.shape),
             "candidate_shape": list(candidate.shape),
         }
+    if reference.size == 0:
+        return {"pass_shape": True, "empty": True}
     delta = candidate - reference
     ref_flat = reference.ravel()
     cand_flat = candidate.ravel()

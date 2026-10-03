@@ -84,8 +84,12 @@ run_ed() {
 
 run_lmdb() {
   if [ "${DRY_RUN}" = "1" ]; then
-    echo "DRY_RUN=1: LMDB stage skipped because no aligned PKLs were calculated."
-    return
+    if [ "${STAGE}" = "lmdb" ]; then
+      echo "error: DRY_RUN=1 is a planning mode for the ED stage and cannot build an LMDB" >&2
+      exit 2
+    fi
+    echo "[SKIP] LMDB stage not run: DRY_RUN=1 planned the ED stage only (no PKLs were calculated)."
+    return 0
   fi
   echo "== LMDB: ${PROCESSED_PKL_DIR} -> ${LMDB_OUTPUT}"
   "${PYTHON}" -m preprocessing.lmdb_builder \

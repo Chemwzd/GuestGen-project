@@ -268,10 +268,16 @@ def main() -> None:
         raise FileNotFoundError(
             f"Missing input: guest_ed={args.guest_ed}, host_mol={args.host_mol}"
         )
+    # Resolve xTB once: a bare command name from PATH must be stored as its
+    # absolute path, otherwise the engine cannot execute it.
+    resolved_xtb = resolve_executable(args.xtb)
+    if resolved_xtb is not None:
+        args.xtb = resolved_xtb
     if args.initial_core is not None:
         args.initial_core = args.initial_core.resolve()
         if not args.initial_core.is_file():
             raise FileNotFoundError(f"Initial core file not found: {args.initial_core}")
+    initial_core_source = args.initial_core
     label = "with_binding" if args.mode == "binding" else "without_binding"
     args.output_dir = args.output_dir or (
         project / "runs" / "fragment_growth" / label / f"{args.target}_{args.mask:g}_{args.tolerance:g}"
@@ -280,6 +286,11 @@ def main() -> None:
     if args.execute and args.mode == "binding" and resolve_executable(args.xtb) is None:
         raise FileNotFoundError(f"Binding mode requires an executable xTB: {args.xtb}")
     output_dir.mkdir(parents=True, exist_ok=True)
+    if args.initial_core is not None:
+        # Keep the run directory self-contained: use a copy of the core file.
+        core_copy = output_dir / "initial_core.sdf"
+        shutil.copy2(str(args.initial_core), str(core_copy))
+        args.initial_core = core_copy
 
     rho = np.load(args.guest_ed)
     ed_grid = rho_to_liged_grid(rho, args.step_size, args.mask)
@@ -324,6 +335,10 @@ def main() -> None:
         "protocol": protocol,
         "source_guest_ed": str(args.guest_ed.resolve()),
         "source_host_mol": str(args.host_mol.resolve()),
+        "initial_core": str(args.initial_core) if args.initial_core else None,
+        "source_initial_core": (
+            str(initial_core_source) if initial_core_source is not None else None
+        ),
         "output_dir": str(output_dir),
         "converter": converter,
         "effective_parameters": effective_parameters,

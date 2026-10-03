@@ -100,11 +100,20 @@ def RetainMaxValues(tensor, alpha=0.4):
 
 
 def GetClusterCenters(merged_arr, eps=1, min_samples=2):
-    """Centers of the three largest DBSCAN clusters of high-density points."""
+    """Centers of the three largest DBSCAN clusters of high-density points.
+
+    The noise label (-1) participates in the size ranking exactly as in the
+    released protocol.
+    """
 
     center_list = []
     merged_arr = merged_arr[merged_arr[:, -1] != 0]
     merged_arr = merged_arr[:, :3]
+    if len(merged_arr) == 0:
+        raise ValueError(
+            "No cluster centers available: the density grid contains no "
+            "nonzero voxels above the retained-maximum threshold"
+        )
 
     from sklearn.cluster import DBSCAN
 
@@ -126,7 +135,9 @@ def CoreId(core, cluster_centers, num_divisions=9):
     """Enumerate translated/rotated placements of one core.
 
     The core is translated to every cluster center and rotated through the
-    9 x 9 x 9 grid of the protocol.
+    9 x 9 x 9 grid of the protocol. Each rotation is applied to the result of
+    the previous one (chained rotations), matching the released placement
+    behavior.
     """
 
     new_cores = []

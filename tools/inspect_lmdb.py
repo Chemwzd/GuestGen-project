@@ -44,6 +44,8 @@ def main() -> None:
     parser.add_argument("--expected-dtype", default=None)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.samples < 1:
+        parser.error("--samples must be at least 1")
     expected_shape = (
         tuple(int(value) for value in args.expected_shape.split(","))
         if args.expected_shape
@@ -114,6 +116,9 @@ def main() -> None:
         "expected_dtype": args.expected_dtype,
         "pass": not errors,
         "errors": errors,
+        "sample_only": bool(args.samples < count),
+        "sampled_entries_validated": len(entries),
+        "entries_total": count,
     }
     payload = json.dumps(report, indent=2, ensure_ascii=False)
     print(payload)

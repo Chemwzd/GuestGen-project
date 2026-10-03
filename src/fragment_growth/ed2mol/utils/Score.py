@@ -75,7 +75,10 @@ class Scorer:
         mol.load_pdb(compf)
         bsid = "UNL:Z:1"
         mol.analyze()
-        interaction = mol.interaction_sets[bsid]
+        interaction = mol.interaction_sets.get(bsid)
+        if interaction is None:
+            # No binding site under the expected identifier => no match.
+            return lig_idx, False
 
         interaction_res = []
         for i in interaction.all_itypes:
@@ -100,11 +103,10 @@ class Scorer:
         lazily when this method is called.
         """
 
-        reclines = [
-            l
-            for l in open(self.protf).readlines()
-            if l[:6] in ["ATOM  ", "HETATM"]
-        ]
+        with open(self.protf, "r") as handle:
+            reclines = [
+                line for line in handle if line[:6] in ["ATOM  ", "HETATM"]
+            ]
         lig_hit = []
         plipdir = os.path.join(self.tmpdir, "plip")
         os.makedirs(plipdir, exist_ok=True)
@@ -118,16 +120,10 @@ class Scorer:
                 ligpdb = Chem.PDBWriter(outfname)
                 ligpdb.write(l)
                 ligpdb.close()
-                ligatoms = [
-                    l
-                    for l in open(outfname).readlines()
-                    if l[:6] == "HETATM"
-                ]
-                ligconect = [
-                    l
-                    for l in open(outfname).readlines()
-                    if l[:6] == "CONECT"
-                ]
+                with open(outfname, "r") as handle:
+                    ligatoms = [line for line in handle if line[:6] == "HETATM"]
+                with open(outfname, "r") as handle:
+                    ligconect = [line for line in handle if line[:6] == "CONECT"]
 
                 with open(outfname, "w") as comp:
                     for _, l in enumerate(ligatoms):
